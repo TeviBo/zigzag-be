@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pydantic
+twilio
+resend
+python-dotenv

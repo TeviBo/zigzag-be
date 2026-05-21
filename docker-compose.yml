@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=zigzag
+      - POSTGRES_PASSWORD=zigzag
+      - POSTGRES_DB=zigzag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  product-service:
+    build: ./product_service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+    depends_on:
+      - postgres
+
+  cart-service:
+    build: ./cart_service
+    ports:
+      - "8002:8002"
+    environment:
+      - PRODUCT_SERVICE_URL=http://product-service:8001
+      - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+    depends_on:
+      - postgres
+
+  order-service:
+    build: ./order_service
+    ports:
+      - "8003:8003"
+    environment:
+      - PRODUCT_SERVICE_URL=http://product-service:8001
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8005
+      - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN:-YOUR_MERCADOPAGO_ACCESS_TOKEN}
+      - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+    depends_on:
+      - postgres
+
+  auth-service:
+    build: ./auth_service
+    ports:
+      - "8004:8004"
+    environment:
+      - SECRET_KEY=super-secret-key-zigzag
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-YOUR_GOOGLE_CLIENT_ID}
+      - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+    depends_on:
+      - postgres
+
+  notification-service:
+    build: ./notification_service
+    ports:
+      - "8005:8005"
+    environment:
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+
+  api-gateway:
+    build: ./api_gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - product-service
+      - cart-service
+      - order-service
+      - auth-service
+      - notification-service
+
+volumes:
+  pgdata:
