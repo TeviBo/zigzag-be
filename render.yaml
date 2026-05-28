@@ -1,0 +1,132 @@
+version: 1
+
+# 1. BASE DE DATOS NATIVA DE RENDER
+databases:
+  - name: zigzag-db
+    plan: free
+    databaseName: zigzag
+    user: zigzag
+
+services:
+  # 2. MICROSERVICIOS DESDE DOCKERFILES
+  - type: web
+    name: product-service
+    plan: free
+    env: docker
+    dockerfilePath: ./product_service/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zigzag-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true # Genera un string seguro automáticamente si no la seteas en la UI
+      - key: CORS_ORIGINS
+        value: http://localhost:5173
+
+  - type: web
+    name: cart-service
+    plan: free
+    env: docker
+    dockerfilePath: ./cart_service/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zigzag-db
+          property: connectionString
+      - key: PRODUCT_SERVICE_URL
+        fromService:
+          type: web
+          name: product-service
+          property: host
+      - key: CORS_ORIGINS
+        value: http://localhost:5173
+
+  - type: web
+    name: order-service
+    plan: free
+    env: docker
+    dockerfilePath: ./order_service/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zigzag-db
+          property: connectionString
+      - key: PRODUCT_SERVICE_URL
+        fromService:
+          type: web
+          name: product-service
+          property: host
+      - key: CART_SERVICE_URL
+        fromService:
+          type: web
+          name: cart-service
+          property: host
+      - key: AUTH_SERVICE_URL
+        fromService:
+          type: web
+          name: auth-service
+          property: host
+      - key: NOTIFICATION_SERVICE_URL
+        fromService:
+          type: web
+          name: notification-service
+          property: host
+      # Variables sensibles obligatorias (Render te las pedirá al deployar)
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: FRONTEND_URL
+        value: http://localhost:5173
+      - key: CORS_ORIGINS
+        value: http://localhost:5173
+
+  - type: web
+    name: auth-service
+    plan: free
+    env: docker
+    dockerfilePath: ./auth_service/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zigzag-db
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: CORS_ORIGINS
+        value: http://localhost:5173
+
+  - type: web
+    name: notification-service
+    plan: free
+    env: docker
+    dockerfilePath: ./notification_service/Dockerfile
+    envVars:
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+
+  # 3. API GATEWAY (El único que idealmente expondrás al público)
+  - type: web
+    name: api-gateway
+    plan: free
+    env: docker
+    dockerfilePath: ./api_gateway/Dockerfile
+    # Render mapeará los puertos expuestos en el Dockerfile automáticamente.
+    # El gateway se comunicará internamente con el resto usando las URLs de Render.
