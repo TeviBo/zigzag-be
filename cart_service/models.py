@@ -14,3 +14,11 @@ class CartItem(Base):
     product_id = Column(Integer)
     quantity = Column(Integer, default=1)
     cart = relationship("Cart", back_populates="items")
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True)
+    discount_type = Column(String)  # 'percentage' or 'fixed'
+    discount_value = Column(Integer) # if percentage, 1-100. If fixed, monetary amount.
+    active = Column(Integer, default=1) # 1 for active, 0 for inactive

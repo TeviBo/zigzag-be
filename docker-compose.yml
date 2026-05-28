@@ -18,6 +18,8 @@ services:
       - "8001:8001"
     environment:
       - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
     depends_on:
       - postgres
 
@@ -28,6 +30,7 @@ services:
     environment:
       - PRODUCT_SERVICE_URL=http://product-service:8001
       - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
     depends_on:
       - postgres
 
@@ -38,7 +41,14 @@ services:
     environment:
       - PRODUCT_SERVICE_URL=http://product-service:8001
       - NOTIFICATION_SERVICE_URL=http://notification-service:8005
-      - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN:-YOUR_MERCADOPAGO_ACCESS_TOKEN}
+      - AUTH_SERVICE_URL=http://auth-service:8004
+      - CART_SERVICE_URL=http://cart-service:8002
+      - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN:?MP_ACCESS_TOKEN is required}
+      - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET:?MP_WEBHOOK_SECRET is required}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
       - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
     depends_on:
       - postgres
@@ -48,8 +58,10 @@ services:
     ports:
       - "8004:8004"
     environment:
-      - SECRET_KEY=super-secret-key-zigzag
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-YOUR_GOOGLE_CLIENT_ID}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
       - DATABASE_URL=postgresql+asyncpg://zigzag:zigzag@postgres:5432/zigzag
     depends_on:
       - postgres
@@ -63,6 +75,7 @@ services:
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
       - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
 
   api-gateway:
     build: ./api_gateway

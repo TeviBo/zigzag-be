@@ -6,3 +6,5 @@ pydantic
 pydantic-settings
 httpx
 mercadopago
+python-jose[cryptography]
+python-dotenv

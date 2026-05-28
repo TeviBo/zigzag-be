@@ -9,6 +9,8 @@ class Item(BaseModel):
 class CheckoutRequest(BaseModel):
     customer_email: str
     items: List[Item]
+    coupon_code: Optional[str] = None
+    payment_method: str = "mp_credit"
 
 class OrderItemResponse(BaseModel):
     id: int
@@ -25,6 +27,8 @@ class OrderResponse(BaseModel):
     customer_email: str
     status: str
     total_amount: float
+    coupon_code: Optional[str] = None
+    discount_amount: float = 0.0
     created_at: datetime
     items: List[OrderItemResponse] = []
     class Config:

@@ -8,3 +8,4 @@ pydantic[email]
 python-multipart
 google-auth
 requests
+python-dotenv

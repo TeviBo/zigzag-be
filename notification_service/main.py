@@ -1,10 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from fastapi import FastAPI, HTTPException, Header, Depends, status
+from typing import Optional
 import os
 import resend
 from twilio.rest import Client
 import schemas
 
 app = FastAPI(title="Notification Service")
+
+INTERNAL_SERVICE_TOKEN = os.environ["INTERNAL_SERVICE_TOKEN"]
+
+
+async def require_internal(x_internal_token: Optional[str] = Header(None, alias="X-Internal-Token")):
+    if x_internal_token != INTERNAL_SERVICE_TOKEN:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token")
 
 # Resend Config
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
@@ -19,7 +31,7 @@ twilio_client = None
 if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
     twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-@app.post("/notify/email")
+@app.post("/notify/email", dependencies=[Depends(require_internal)])
 async def send_email_ticket(request: schemas.EmailRequest):
     if not RESEND_API_KEY:
         print(f"MOCK EMAIL: Envio de email simulado a {request.to_email} para orden {request.order_id}")
@@ -60,7 +72,7 @@ STATUS_MESSAGES = {
     "delivered": "🎁 ¡Entregado! Tu pedido #{id} ya llegó a destino. ¡Que lo disfrutes {name}!"
 }
 
-@app.post("/notify/whatsapp")
+@app.post("/notify/whatsapp", dependencies=[Depends(require_internal)])
 async def send_whatsapp_update(request: schemas.WhatsappRequest):
     message_template = STATUS_MESSAGES.get(request.status)
     if not message_template:

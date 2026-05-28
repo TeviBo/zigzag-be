@@ -20,3 +20,16 @@ class CartResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class CouponValidateRequest(BaseModel):
+    code: str
+
+class CouponResponse(BaseModel):
+    id: int
+    code: str
+    discount_type: str
+    discount_value: int
+    active: int
+
+    class Config:
+        from_attributes = True

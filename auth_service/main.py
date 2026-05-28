@@ -1,6 +1,11 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from passlib.context import CryptContext
@@ -14,19 +19,21 @@ from database import Base, engine, AsyncSessionLocal
 import models
 import schemas
 
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-zigzag")
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+INTERNAL_SERVICE_TOKEN = os.environ["INTERNAL_SERVICE_TOKEN"]
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 app = FastAPI(title="Auth Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,7 +94,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email, "name": user.first_name or ""}, expires_delta=access_token_expires
+        data={"sub": user.email, "name": user.first_name or "", "is_admin": bool(user.is_admin)}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -116,14 +123,20 @@ async def google_login(payload: GoogleLogin, db: AsyncSession = Depends(get_db))
 
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": user.email, "name": user.first_name or ""}, expires_delta=access_token_expires
+            data={"sub": user.email, "name": user.first_name or "", "is_admin": bool(user.is_admin)}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
     except ValueError as e:
         print("Google Auth error:", e)
         raise HTTPException(status_code=400, detail="Token de Google inválido")
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+async def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -159,7 +172,24 @@ async def update_user_me(user_update: schemas.UserUpdate, current_user: models.U
     return current_user
 
 @app.get("/auth/users/{email}", response_model=schemas.UserResponse)
-async def get_user_by_email(email: str, db: AsyncSession = Depends(get_db)):
+async def get_user_by_email(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    x_internal_token: Optional[str] = Header(None, alias="X-Internal-Token"),
+    token: Optional[str] = Depends(oauth2_scheme),
+):
+    # Allow either internal service-to-service call or admin JWT
+    is_internal = x_internal_token and x_internal_token == INTERNAL_SERVICE_TOKEN
+    is_admin_call = False
+    if not is_internal and token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            is_admin_call = bool(payload.get("is_admin", False))
+        except jwt.JWTError:
+            pass
+    if not is_internal and not is_admin_call:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authorized")
+
     result = await db.execute(select(models.User).filter(models.User.email == email))
     user = result.scalars().first()
     if user is None:

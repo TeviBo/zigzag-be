@@ -1,3 +1,7 @@
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,20 +11,36 @@ from contextlib import asynccontextmanager
 import httpx
 import os
 
-from database import engine, Base, get_db
-from models import Cart as CartModel, CartItem as CartItemModel
-from schemas import CartResponse, CartItemCreate
+from database import engine, Base, get_db, AsyncSessionLocal
+from models import Cart as CartModel, CartItem as CartItemModel, Coupon as CouponModel
+from schemas import CartResponse, CartItemCreate, CouponValidateRequest, CouponResponse
 
 PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://localhost:8001")
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # Seed a default coupon for testing
+    async with AsyncSessionLocal() as db:
+        existing = await db.execute(select(CouponModel).where(CouponModel.code == "ZIGZAG10"))
+        if not existing.scalar_one_or_none():
+            db.add(CouponModel(code="ZIGZAG10", discount_type="percentage", discount_value=10, active=1))
+            await db.commit()
     yield
 
 app = FastAPI(title="Cart Service", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.post("/coupons/validate", response_model=CouponResponse)
+async def validate_coupon(req: CouponValidateRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(CouponModel).where(CouponModel.code == req.code.upper()))
+    coupon = result.scalar_one_or_none()
+    if not coupon or coupon.active != 1:
+        raise HTTPException(status_code=400, detail="Invalid or expired coupon code")
+    return coupon
 
 @app.get("/cart/{session_id}", response_model=CartResponse)
 async def get_cart(session_id: str, db: AsyncSession = Depends(get_db)):

@@ -10,6 +10,8 @@ class Order(Base):
     customer_email = Column(String, index=True)
     status = Column(String, default="pending")
     total_amount = Column(Float)
+    coupon_code = Column(String, nullable=True)
+    discount_amount = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     items = relationship("OrderItem", back_populates="order", cascade="all, delete")
 
